@@ -1,0 +1,490 @@
+import { useState, useEffect, useRef } from "react";
+
+const MODULES = [
+  {
+    id: "strategy",
+    icon: "◈",
+    label: "Strategy",
+    color: "#FF6B35",
+    accent: "#FF9F1C",
+    systemPrompt: `You are an elite Instagram Strategy Director. Your role is to develop comprehensive, data-driven social media strategies.
+
+You help with:
+- Brand positioning and voice on Instagram
+- Content pillars and themes
+- Growth strategy (organic, hashtag, collaboration)
+- Competitor analysis and gap identification
+- Campaign planning and content calendars
+- Audience persona development
+- Monetization and partnership strategy
+
+Be specific, actionable, and tailor recommendations to the brand's niche. Always ask clarifying questions if needed. Format responses with clear sections using bold headers.`,
+    placeholder: "Describe your brand, niche, and goals. I'll build your strategy...",
+    examples: ["Build a 90-day Instagram strategy for a sustainable fashion brand", "What content pillars should a fitness coach use?", "How do I position myself against competitors in the food niche?"]
+  },
+  {
+    id: "community",
+    icon: "⬡",
+    label: "Community",
+    color: "#7C3AED",
+    accent: "#A78BFA",
+    systemPrompt: `You are an expert Instagram Community Manager with deep expertise in brand voice, audience engagement, and relationship building.
+
+You help with:
+- Crafting responses to comments and DMs
+- Handling negative feedback and crisis management
+- Community engagement strategies
+- Brand voice guidelines and tone
+- Influencer and collaborator outreach messages
+- Building loyal community rituals and traditions
+- Engagement rate optimization
+
+Always maintain brand professionalism while being authentic and human. When drafting responses, match the brand's established tone.`,
+    placeholder: "Paste a comment, DM, or describe a community situation to handle...",
+    examples: ["Draft a response to a negative review about late shipping", "Write an influencer outreach DM for a skincare brand", "How do I increase my comment engagement rate?"]
+  },
+  {
+    id: "content",
+    icon: "▣",
+    label: "Content",
+    color: "#059669",
+    accent: "#34D399",
+    systemPrompt: `You are a world-class Instagram Content Creator and Copywriter. You craft scroll-stopping captions, hooks, and content ideas that drive engagement and conversions.
+
+You help with:
+- Writing compelling captions with strong hooks
+- Reel scripts and storyboards
+- Carousel content structure and copy
+- Stories sequences and CTAs
+- Hashtag strategy and research
+- Content batch planning (30-day calendars)
+- Bio and profile optimization
+- Caption A/B testing variations
+
+Your captions balance brand voice with platform-native language. Always include hook options, body copy, and CTA variations.`,
+    placeholder: "Describe your post concept, product, or topic for content creation...",
+    examples: ["Write 3 caption variations for a coffee shop's Monday morning post", "Create a 10-slide carousel about productivity tips", "Script a 30-second Reel about skincare routine"]
+  },
+  {
+    id: "analytics",
+    icon: "◉",
+    label: "Analytics",
+    color: "#0EA5E9",
+    accent: "#38BDF8",
+    systemPrompt: `You are a senior Instagram Analytics & Insights Specialist. You interpret data, identify patterns, and translate metrics into actionable growth strategies.
+
+You help with:
+- Interpreting reach, impressions, and engagement metrics
+- Identifying best-performing content patterns
+- Follower growth analysis and benchmarking
+- Hashtag performance evaluation
+- Optimal posting time analysis
+- Content format performance (Reels vs. carousels vs. static)
+- ROI tracking for campaigns
+- Competitive benchmarking
+
+When given metrics, provide specific, prioritized recommendations. Always contextualize data within industry benchmarks.`,
+    placeholder: "Share your metrics, stats, or analytics questions...",
+    examples: ["My reach dropped 40% this month, what should I check?", "My Reels get 5x more reach but carousels get more saves — what to prioritize?", "How do I interpret my follower demographic insights?"]
+  },
+  {
+    id: "research",
+    icon: "◎",
+    label: "Research",
+    color: "#DC2626",
+    accent: "#F87171",
+    systemPrompt: `You are an Instagram Trends & Research Analyst with expertise in platform algorithms, cultural trends, and competitive intelligence.
+
+You help with:
+- Trending audio and Reel formats research
+- Niche and audience research
+- Hashtag research and categorization
+- Algorithm updates and their implications
+- Competitor content audit and analysis
+- Trend forecasting and seasonal planning
+- Viral content pattern analysis
+- Platform feature updates and best practices
+
+Stay current on Instagram's evolving algorithm. Provide research in structured, scannable formats with clear takeaways.`,
+    placeholder: "Ask about trends, algorithm, competitors, or any Instagram research...",
+    examples: ["What Reel formats are trending for beauty brands?", "How has the Instagram algorithm changed recently?", "Research hashtag strategy for a B2B SaaS brand"]
+  }
+];
+
+const TypingIndicator = () => (
+  <div style={{ display: "flex", gap: "5px", padding: "16px 20px", alignItems: "center" }}>
+    {[0, 1, 2].map(i => (
+      <div key={i} style={{
+        width: "7px", height: "7px", borderRadius: "50%",
+        background: "rgba(255,255,255,0.4)",
+        animation: "bounce 1.2s ease-in-out infinite",
+        animationDelay: `${i * 0.15}s`
+      }} />
+    ))}
+  </div>
+);
+
+function ChatModule({ module, onBack }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const sendMessage = async (text) => {
+    const userText = text || input.trim();
+    if (!userText || loading) return;
+    setInput("");
+
+    const newMessages = [...messages, { role: "user", content: userText }];
+    setMessages(newMessages);
+    setLoading(true);
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: module.systemPrompt,
+          messages: newMessages
+        })
+      });
+      const data = await res.json();
+      const reply = data.content?.map(b => b.text || "").join("") || "Something went wrong.";
+      setMessages([...newMessages, { role: "assistant", content: reply }]);
+    } catch {
+      setMessages([...newMessages, { role: "assistant", content: "Connection error. Please try again." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const formatMessage = (text) => {
+    return text.split("\n").map((line, i) => {
+      if (line.startsWith("**") && line.endsWith("**")) {
+        return <div key={i} style={{ fontWeight: 700, color: module.accent, marginTop: i > 0 ? "12px" : 0, fontSize: "13px", letterSpacing: "0.05em", textTransform: "uppercase" }}>{line.replace(/\*\*/g, "")}</div>;
+      }
+      if (line.startsWith("- ") || line.startsWith("• ")) {
+        return <div key={i} style={{ display: "flex", gap: "8px", marginTop: "4px" }}><span style={{ color: module.accent, flexShrink: 0 }}>→</span><span>{line.replace(/^[-•] /, "")}</span></div>;
+      }
+      const boldInline = line.replace(/\*\*(.+?)\*\*/g, `<strong style="color:${module.accent}">$1</strong>`);
+      return <div key={i} style={{ marginTop: i > 0 && line ? "6px" : 0 }} dangerouslySetInnerHTML={{ __html: boldInline || "&nbsp;" }} />;
+    });
+  };
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: "#0A0A0A", fontFamily: "'DM Mono', 'Courier New', monospace"
+    }}>
+      <style>{`
+        @keyframes bounce { 0%,80%,100% { transform:translateY(0) } 40% { transform:translateY(-6px) } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+        ::-webkit-scrollbar { width: 4px }
+        ::-webkit-scrollbar-track { background: transparent }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px }
+        textarea { resize:none; outline:none; }
+        textarea:focus { border-color: ${module.color} !important; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px",
+        padding: "16px 20px", borderBottom: "1px solid #1A1A1A",
+        background: "#0D0D0D"
+      }}>
+        <button onClick={onBack} style={{
+          background: "none", border: "1px solid #2A2A2A", color: "#666",
+          cursor: "pointer", padding: "6px 10px", borderRadius: "6px",
+          fontSize: "11px", letterSpacing: "0.08em", transition: "all 0.2s"
+        }}
+          onMouseEnter={e => { e.target.style.borderColor = module.color; e.target.style.color = module.color; }}
+          onMouseLeave={e => { e.target.style.borderColor = "#2A2A2A"; e.target.style.color = "#666"; }}
+        >← BACK</button>
+        <div style={{
+          width: "32px", height: "32px", borderRadius: "8px",
+          background: `linear-gradient(135deg, ${module.color}22, ${module.accent}22)`,
+          border: `1px solid ${module.color}44`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "16px", color: module.color
+        }}>{module.icon}</div>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#F0F0F0", letterSpacing: "0.05em" }}>{module.label.toUpperCase()}</div>
+          <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.08em" }}>AI SPECIALIST ACTIVE</div>
+        </div>
+        <div style={{
+          marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px",
+          fontSize: "10px", color: module.color, letterSpacing: "0.08em"
+        }}>
+          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: module.color, animation: "bounce 2s infinite" }} />
+          LIVE
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+        {messages.length === 0 && (
+          <div style={{ animation: "fadeUp 0.5s ease" }}>
+            <div style={{
+              background: `linear-gradient(135deg, ${module.color}15, ${module.accent}08)`,
+              border: `1px solid ${module.color}30`,
+              borderRadius: "12px", padding: "20px", marginBottom: "20px"
+            }}>
+              <div style={{ fontSize: "13px", color: module.accent, marginBottom: "8px", letterSpacing: "0.08em", fontWeight: 700 }}>
+                {module.icon} {module.label.toUpperCase()} SPECIALIST
+              </div>
+              <div style={{ fontSize: "12px", color: "#888", lineHeight: 1.7 }}>
+                Your dedicated AI expert is ready. Ask anything about {module.label.toLowerCase()} or try an example below.
+              </div>
+            </div>
+            <div style={{ fontSize: "10px", color: "#555", marginBottom: "10px", letterSpacing: "0.1em" }}>QUICK STARTS</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {module.examples.map((ex, i) => (
+                <button key={i} onClick={() => sendMessage(ex)} style={{
+                  background: "#111", border: "1px solid #222", borderRadius: "8px",
+                  padding: "12px 14px", textAlign: "left", cursor: "pointer",
+                  fontSize: "11px", color: "#999", letterSpacing: "0.02em", lineHeight: 1.5,
+                  transition: "all 0.2s"
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = module.color + "60"; e.currentTarget.style.color = "#ccc"; e.currentTarget.style.background = "#141414"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "#222"; e.currentTarget.style.color = "#999"; e.currentTarget.style.background = "#111"; }}
+                >
+                  <span style={{ color: module.color, marginRight: "8px" }}>→</span>{ex}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} style={{
+            animation: "fadeUp 0.3s ease",
+            display: "flex", flexDirection: "column",
+            alignItems: msg.role === "user" ? "flex-end" : "flex-start"
+          }}>
+            {msg.role === "user" ? (
+              <div style={{
+                background: `linear-gradient(135deg, ${module.color}, ${module.accent})`,
+                borderRadius: "12px 12px 4px 12px",
+                padding: "12px 16px", maxWidth: "75%",
+                fontSize: "12px", color: "#000", fontWeight: 500, lineHeight: 1.6
+              }}>{msg.content}</div>
+            ) : (
+              <div style={{
+                background: "#111", border: "1px solid #1E1E1E",
+                borderRadius: "12px 12px 12px 4px",
+                padding: "14px 18px", maxWidth: "90%",
+                fontSize: "12px", color: "#D0D0D0", lineHeight: 1.8
+              }}>
+                <div style={{ marginBottom: "6px", fontSize: "10px", color: module.color, letterSpacing: "0.1em" }}>
+                  {module.icon} {module.label.toUpperCase()}
+                </div>
+                {formatMessage(msg.content)}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {loading && (
+          <div style={{ animation: "fadeUp 0.3s ease" }}>
+            <div style={{
+              background: "#111", border: "1px solid #1E1E1E",
+              borderRadius: "12px 12px 12px 4px", display: "inline-block"
+            }}>
+              <TypingIndicator />
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: "16px 20px", borderTop: "1px solid #1A1A1A", background: "#0D0D0D" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKey}
+            placeholder={module.placeholder}
+            rows={2}
+            style={{
+              flex: 1, background: "#111", border: "1px solid #2A2A2A",
+              borderRadius: "10px", padding: "12px 14px",
+              color: "#E0E0E0", fontSize: "12px", lineHeight: 1.6,
+              fontFamily: "inherit", transition: "border-color 0.2s",
+              maxHeight: "120px"
+            }}
+          />
+          <button onClick={() => sendMessage()} disabled={!input.trim() || loading} style={{
+            background: input.trim() && !loading ? `linear-gradient(135deg, ${module.color}, ${module.accent})` : "#1A1A1A",
+            border: "none", borderRadius: "10px", padding: "12px 18px",
+            color: input.trim() && !loading ? "#000" : "#444",
+            cursor: input.trim() && !loading ? "pointer" : "not-allowed",
+            fontSize: "14px", transition: "all 0.2s", flexShrink: 0
+          }}>→</button>
+        </div>
+        <div style={{ marginTop: "8px", fontSize: "10px", color: "#444", letterSpacing: "0.05em", textAlign: "center" }}>
+          SHIFT+ENTER FOR NEW LINE · ENTER TO SEND
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [activeModule, setActiveModule] = useState(null);
+  const [hoveredId, setHoveredId] = useState(null);
+
+  if (activeModule) {
+    return (
+      <div style={{ height: "100vh", background: "#0A0A0A" }}>
+        <ChatModule module={activeModule} onBack={() => setActiveModule(null)} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#0A0A0A",
+      fontFamily: "'DM Mono', 'Courier New', monospace",
+      display: "flex", flexDirection: "column"
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes pulse { 0%,100% { opacity:0.4 } 50% { opacity:1 } }
+        @keyframes scanline { 0% { transform:translateY(-100%) } 100% { transform:translateY(100vh) } }
+        * { box-sizing:border-box; margin:0; padding:0 }
+        ::-webkit-scrollbar { width:4px }
+        ::-webkit-scrollbar-thumb { background:#222 }
+      `}</style>
+
+      {/* Scanline effect */}
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+        pointerEvents: "none", zIndex: 100, overflow: "hidden", opacity: 0.03
+      }}>
+        <div style={{
+          position: "absolute", width: "100%", height: "2px",
+          background: "rgba(255,255,255,0.8)",
+          animation: "scanline 8s linear infinite"
+        }} />
+      </div>
+
+      {/* Grid background */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none",
+        backgroundImage: "linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px)",
+        backgroundSize: "40px 40px"
+      }} />
+
+      <div style={{ position: "relative", zIndex: 1, padding: "40px 24px 60px", maxWidth: "520px", margin: "0 auto", width: "100%" }}>
+
+        {/* Header */}
+        <div style={{ animation: "fadeUp 0.6s ease", marginBottom: "40px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+            <div style={{
+              width: "40px", height: "40px", borderRadius: "10px",
+              background: "linear-gradient(135deg, #FF6B35, #7C3AED)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "18px"
+            }}>◈</div>
+            <div>
+              <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.15em" }}>CLAUDE-POWERED</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#F0F0F0", letterSpacing: "0.04em" }}>INSTAGRAM OS</div>
+            </div>
+            <div style={{
+              marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px",
+              background: "#0F1A0F", border: "1px solid #1A3A1A", borderRadius: "20px",
+              padding: "5px 10px", fontSize: "9px", color: "#4ADE80", letterSpacing: "0.1em"
+            }}>
+              <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#4ADE80", animation: "pulse 2s infinite" }} />
+              5 SPECIALISTS ONLINE
+            </div>
+          </div>
+          <div style={{ fontSize: "11px", color: "#555", lineHeight: 1.8, letterSpacing: "0.03em" }}>
+            Your complete AI-powered Instagram operation. Select a specialist to get started.
+          </div>
+        </div>
+
+        {/* Module Grid */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {MODULES.map((mod, i) => (
+            <button
+              key={mod.id}
+              onClick={() => setActiveModule(mod)}
+              onMouseEnter={() => setHoveredId(mod.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              style={{
+                animation: `fadeUp ${0.5 + i * 0.08}s ease both`,
+                background: hoveredId === mod.id ? `linear-gradient(135deg, ${mod.color}12, ${mod.accent}06)` : "#0D0D0D",
+                border: `1px solid ${hoveredId === mod.id ? mod.color + "50" : "#1E1E1E"}`,
+                borderRadius: "14px", padding: "18px 20px", cursor: "pointer",
+                textAlign: "left", transition: "all 0.25s ease",
+                transform: hoveredId === mod.id ? "translateX(4px)" : "none"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{
+                  width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0,
+                  background: `linear-gradient(135deg, ${mod.color}20, ${mod.accent}12)`,
+                  border: `1px solid ${mod.color}35`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "20px", color: mod.color,
+                  transition: "all 0.25s",
+                  boxShadow: hoveredId === mod.id ? `0 0 16px ${mod.color}25` : "none"
+                }}>{mod.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: "12px", fontWeight: 700, color: "#E0E0E0",
+                    letterSpacing: "0.08em", marginBottom: "4px"
+                  }}>
+                    {mod.label.toUpperCase()}
+                    <span style={{
+                      marginLeft: "8px", fontSize: "9px", color: mod.color,
+                      background: mod.color + "18", borderRadius: "4px",
+                      padding: "2px 6px", letterSpacing: "0.1em"
+                    }}>SPECIALIST</span>
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#555", letterSpacing: "0.04em", lineHeight: 1.5 }}>
+                    {mod.id === "strategy" && "Growth planning · Content calendars · Positioning"}
+                    {mod.id === "community" && "DMs · Comments · Outreach · Crisis management"}
+                    {mod.id === "content" && "Captions · Reels · Carousels · Hashtags"}
+                    {mod.id === "analytics" && "Metrics · Performance · Benchmarking · Insights"}
+                    {mod.id === "research" && "Trends · Algorithm · Competitors · Intelligence"}
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: "16px", color: hoveredId === mod.id ? mod.color : "#333",
+                  transition: "all 0.25s",
+                  transform: hoveredId === mod.id ? "translateX(3px)" : "none"
+                }}>→</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{ marginTop: "36px", textAlign: "center", animation: "fadeUp 1s ease" }}>
+          <div style={{ fontSize: "9px", color: "#333", letterSpacing: "0.15em" }}>
+            POWERED BY CLAUDE · ANTHROPIC · v2.0
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
